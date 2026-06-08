@@ -1,0 +1,38 @@
+# SSL certificates (contain private keys — never commit)
+certs/
+
+# User data — recordings, transcripts, PDFs generated at runtime
+backend/storage/recordings/
+backend/storage/transcripts/
+backend/storage/pdfs/
+backend/storage/summaries/
+backend/storage/speakers/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+
+# Docker volumes
+postgres_data/
+
+# Editor
+.vscode/
+.idea/

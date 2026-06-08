@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: meeting_ai_postgres
+    environment:
+      POSTGRES_USER: meeting_user
+      POSTGRES_PASSWORD: meeting_pass
+      POSTGRES_DB: meeting_ai_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: meeting_ai_redis
+    ports:
+      - "6379:6379"
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: meeting_ai_livekit
+    command: --config /livekit.yaml
+    volumes:
+      - ./livekit.yaml:/livekit.yaml:ro
+    ports:
+      - "0.0.0.0:7880:7880"
+      - "0.0.0.0:7881:7881"
+      - "0.0.0.0:7881:7881/udp"
+      - "0.0.0.0:7882:7882"
+      - "0.0.0.0:7882:7882/udp"
+
+  backend:
+    build: ./backend
+    container_name: meeting_ai_backend
+    ports:
+      - "0.0.0.0:8000:8000"
+    environment:
+      DATABASE_URL: postgresql://meeting_user:meeting_pass@postgres:5432/meeting_ai_db
+      REDIS_URL: redis://redis:6379/0
+      APP_BASE_URL: http://${HOST_IP:-localhost}:5173
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: devsecret
+    depends_on:
+      - postgres
+      - redis
+      - livekit
+
+  frontend:
+    build: ./frontend
+    container_name: meeting_ai_frontend
+    ports:
+      - "0.0.0.0:5173:5173"
+    volumes:
+      - ./certs:/certs:ro
+    environment:
+      VITE_LIVEKIT_URL: ws://${HOST_IP:-localhost}:7880
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
