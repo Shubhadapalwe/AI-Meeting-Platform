@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any
 
 
 class MockSummaryRequest(BaseModel):
@@ -24,6 +24,11 @@ class SummaryResponse(BaseModel):
     key_topics: List[str] = []
     word_count: int = 0
     generated_by: str = "extractive_fallback"
+    # Fathom-style rich fields
+    meeting_purpose: str = ""
+    key_takeaways: List[Any] = []   # [{"title": str, "detail": str}]
+    topics: List[Any] = []          # [{"title": str, "points": [str]}]
+    next_steps: List[Any] = []      # [{"person": str, "task": str}]
 
 
 # Phase 7 — Ask AI

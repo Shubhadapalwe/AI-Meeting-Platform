@@ -35,10 +35,14 @@ services:
     container_name: meeting_ai_backend
     ports:
       - "0.0.0.0:8000:8000"
+    volumes:
+      - ./certs:/certs:ro
+    env_file:
+      - .env                     # created by start.sh if missing (SMTP optional)
     environment:
       DATABASE_URL: postgresql://meeting_user:meeting_pass@postgres:5432/meeting_ai_db
       REDIS_URL: redis://redis:6379/0
-      APP_BASE_URL: http://${HOST_IP:-localhost}:5173
+      APP_BASE_URL: https://${HOST_IP:-localhost}:5173
       LIVEKIT_URL: ws://livekit:7880
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}
       LIVEKIT_API_KEY: devkey

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { transcribeMeeting, getTranscripts, diarizeMeeting } from "../services/api";
+import { useState, useEffect, useCallback } from "react";
+import { transcribeMeeting, diarizeMeeting, getTranscripts } from "../services/api";
 
 const SPEAKER_COLORS = [
   "#38bdf8", "#a78bfa", "#fb923c", "#34d399", "#f472b6",
@@ -14,35 +14,54 @@ function getSpeakerColor(name) {
 }
 
 export default function TranscriptPanel({ meetingId }) {
-  const [loading, setLoading] = useState(false);
+  const [loading,    setLoading]    = useState(false);
   const [transcript, setTranscript] = useState(null);
-  const [status, setStatus] = useState("No transcript generated yet.");
+  const [status,     setStatus]     = useState(
+    "No transcript yet. Record audio then click Generate Transcript."
+  );
+  const [pendingRefresh, setPendingRefresh] = useState(false);
 
-  async function handleTranscribe() {
+  // ── Auto-run transcription ─────────────────────────────────────────────────
+  const runTranscribe = useCallback(async (silent = false) => {
+    if (loading) return;
     try {
       setLoading(true);
-      setStatus("Transcribing audio using Whisper... (may take 1-2 min)");
-      const result = await transcribeMeeting(meetingId);
-      setTranscript(result.transcript);
-      setStatus("✅ Transcript generated. Run diarization to identify speakers.");
-    } catch (error) {
-      console.error(error);
-      setStatus("❌ Transcription failed. Check backend logs.");
+      if (!silent) setStatus("Transcribing with Whisper… (may take 1–2 min)");
+      else         setStatus("New recording detected — updating transcript…");
+      await transcribeMeeting(meetingId);
+      setStatus("Merging speaker segments…");
+      const diarized = await diarizeMeeting(meetingId);
+      setTranscript(diarized.transcript);
+      setPendingRefresh(false);
+      setStatus("✅ Transcript ready with speaker labels.");
+    } catch (err) {
+      setStatus("❌ " + (err.message || "Transcription failed. Check backend logs."));
     } finally {
       setLoading(false);
     }
-  }
+  }, [meetingId, loading]);
+
+  // ── Listen for new recordings uploaded on this device ─────────────────────
+  useEffect(() => {
+    function onUploaded(e) {
+      if (e.detail?.meetingId !== meetingId) return;
+      // Auto re-run transcription so display never stays stale
+      setPendingRefresh(true);
+      runTranscribe(true);
+    }
+    window.addEventListener("recording-uploaded", onUploaded);
+    return () => window.removeEventListener("recording-uploaded", onUploaded);
+  }, [meetingId, runTranscribe]);
 
   async function handleDiarize() {
     try {
       setLoading(true);
-      setStatus("Identifying speakers...");
+      setStatus("Re-identifying speakers…");
       const result = await diarizeMeeting(meetingId);
       setTranscript(result.transcript);
       setStatus("✅ Speaker diarization complete.");
-    } catch (error) {
-      console.error(error);
-      setStatus("❌ Diarization failed. Generate transcript first.");
+    } catch (err) {
+      setStatus("❌ " + (err.message || "Diarization failed. Generate transcript first."));
     } finally {
       setLoading(false);
     }
@@ -51,17 +70,19 @@ export default function TranscriptPanel({ meetingId }) {
   async function handleLoadTranscript() {
     try {
       setLoading(true);
-      setStatus("Loading saved transcript...");
-      const result = await getTranscripts(meetingId);
-      if (!result.transcripts.length) {
-        setStatus("No saved transcript found.");
-        setTranscript(null);
+      setStatus("Loading saved transcript…");
+      try {
+        const result = await diarizeMeeting(meetingId);
+        setTranscript(result.transcript);
+        setStatus("✅ Transcript loaded with speaker labels.");
         return;
-      }
-      setTranscript(result.transcripts[result.transcripts.length - 1]);
+      } catch (_) {}
+      const result = await getTranscripts(meetingId);
+      const list = result.transcripts || [];
+      if (!list.length) { setStatus("No saved transcript found."); setTranscript(null); return; }
+      setTranscript(list[list.length - 1]);
       setStatus("✅ Saved transcript loaded.");
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
       setStatus("❌ Could not load transcript.");
     } finally {
       setLoading(false);
@@ -70,15 +91,18 @@ export default function TranscriptPanel({ meetingId }) {
 
   const btnPrimary = {
     padding: "9px 14px", borderRadius: "12px", border: "none",
-    cursor: "pointer", fontWeight: 800, background: "#2563eb", color: "white",
-    opacity: loading ? 0.6 : 1,
+    cursor: loading ? "not-allowed" : "pointer", fontWeight: 800,
+    background: "#2563eb", color: "white", opacity: loading ? 0.6 : 1,
   };
   const btnSecondary = {
     padding: "9px 14px", borderRadius: "12px",
     border: "1px solid rgba(255,255,255,0.15)", background: "transparent",
-    color: "#e5e7eb", cursor: "pointer", fontWeight: 800,
-    opacity: loading ? 0.6 : 1,
+    color: "#e5e7eb", cursor: loading ? "not-allowed" : "pointer",
+    fontWeight: 800, opacity: loading ? 0.6 : 1,
   };
+
+  const speakerList      = transcript?.participants || transcript?.speakers || [];
+  const oneSpeakerWarning = transcript && speakerList.length < 2;
 
   return (
     <div style={{
@@ -89,8 +113,8 @@ export default function TranscriptPanel({ meetingId }) {
       <h3 style={{ marginTop: 0, fontSize: 15 }}>🎙 AI Transcript</h3>
 
       <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
-        <button onClick={handleTranscribe} disabled={loading} style={btnPrimary}>
-          {loading ? "Processing..." : "Generate Transcript"}
+        <button onClick={() => runTranscribe(false)} disabled={loading} style={btnPrimary}>
+          {loading ? "Processing…" : "Generate Transcript"}
         </button>
         <button onClick={handleDiarize} disabled={loading} style={btnPrimary}>
           Identify Speakers
@@ -102,25 +126,33 @@ export default function TranscriptPanel({ meetingId }) {
 
       <p style={{ color: "#94a3b8", fontSize: "12px", margin: "0 0 10px" }}>{status}</p>
 
+      {oneSpeakerWarning && (
+        <div style={{
+          background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)",
+          borderRadius: 12, padding: "10px 14px", marginBottom: 12,
+          color: "#fde68a", fontSize: 12,
+        }}>
+          <strong>⚠ Only one speaker detected.</strong>{" "}
+          For two-speaker transcripts, <strong>both participants must click "⏺ Start Recording"</strong>{" "}
+          on their own device before speaking. Then click <strong>Generate Transcript</strong> again.
+        </div>
+      )}
+
       {transcript && (
         <div>
           <div style={{ display: "flex", gap: "12px", fontSize: "12px", color: "#38bdf8", marginBottom: "10px", flexWrap: "wrap" }}>
             <span>🌐 {transcript.language}</span>
             <span>⏱ {transcript.duration}s</span>
-            {transcript.speakers && transcript.speakers.length > 0 && (
-              <span>👥 {transcript.speakers.join(", ")}</span>
-            )}
+            {speakerList.length > 0 && <span>👥 {speakerList.join(", ")}</span>}
           </div>
 
           <div style={{ maxHeight: "280px", overflowY: "auto" }}>
-            {transcript.segments.map((segment, index) => (
+            {(transcript.segments || []).map((segment, index) => (
               <div key={index} style={{
                 padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)",
               }}>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "2px" }}>
-                  <span style={{ color: "#4b5563", fontSize: "11px" }}>
-                    {segment.start}s
-                  </span>
+                  <span style={{ color: "#4b5563", fontSize: "11px" }}>{segment.start}s</span>
                   {segment.speaker && (
                     <span style={{
                       color: getSpeakerColor(segment.speaker),

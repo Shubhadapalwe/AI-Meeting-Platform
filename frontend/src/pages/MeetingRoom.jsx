@@ -1,6 +1,6 @@
-import ConnectionStatus from './ConnectionStatus'
-import ControlsBar from './ControlsBar'
-import ParticipantGrid from './ParticipantGrid'
+import ConnectionStatus from '../components/ConnectionStatus'
+import ControlsBar from '../components/ControlsBar'
+import ParticipantGrid from '../components/ParticipantGrid'
 import TranscriptPanel from '../components/TranscriptPanel'
 
 export default function MeetingRoom({

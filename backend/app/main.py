@@ -1,6 +1,8 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pathlib import Path
 
 from app.api.meetings import router as meeting_router
 from app.api.ai import router as ai_router
@@ -10,11 +12,13 @@ from app.api.recordings import router as recording_router
 from app.api.transcripts import router as transcript_router
 from app.api.pdf import router as pdf_router
 from app.api.meetings_merge import router as meetings_merge_router
+from app.api.speakers import router as speakers_router
+from app.api.email_digest import router as email_router
 
 app = FastAPI(
     title="AI Meeting Intelligence Platform",
     description="Backend API for Zoom-like meeting system with Fathom-style AI assistant features.",
-    version="0.9.1",
+    version="0.10.0",
 )
 
 app.add_middleware(
@@ -75,6 +79,20 @@ app.include_router(
     tags=["Meeting Aggregation"],
 )
 
+# Phase 9.2 - Speaker Analytics
+app.include_router(
+    speakers_router,
+    prefix="/api/speakers",
+    tags=["Speaker Analytics"],
+)
+
+# Phase 10 - Email Digest
+app.include_router(
+    email_router,
+    prefix="/api/email",
+    tags=["Email Digest"],
+)
+
 @app.get("/")
 
 def root():
@@ -83,6 +101,19 @@ def root():
         "version": "0.9.1",
         "status": "running",
     }
+
+
+@app.get("/rootca")
+def download_rootca():
+    """Serve the mkcert root CA so Android devices can import and trust it."""
+    ca_path = Path("/certs/rootCA.pem")
+    if not ca_path.exists():
+        return {"error": "Root CA not found. Run bash start.sh first."}
+    return FileResponse(
+        ca_path,
+        media_type="application/x-pem-file",
+        filename="rootCA.pem",
+    )
 
 
 @app.get("/health")

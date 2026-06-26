@@ -1,14 +1,24 @@
-# SSL certificates (contain private keys — never commit)
+# ── Secrets & Certificates ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
 certs/
 
-# User data — recordings, transcripts, PDFs generated at runtime
+# ── Runtime data (generated, not source code) ─────────────────────────────────
 backend/storage/recordings/
 backend/storage/transcripts/
 backend/storage/pdfs/
 backend/storage/summaries/
 backend/storage/speakers/
+backend/storage/email_logs/
+backend/storage/metadata/
+audio_output/
 
-# Python
+# ── Scratch / legacy folders ──────────────────────────────────────────────────
+MeetingRoomPage/
+ai/
+
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
@@ -18,21 +28,24 @@ __pycache__/
 .venv/
 venv/
 
-# Node
-frontend/node_modules/
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
 frontend/dist/
+frontend/.vite/
+npm-debug.log*
 
-# Environment files
-.env
-.env.local
-.env.*.local
-
-# macOS
+# ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 
-# Docker volumes
+# ── Docker ────────────────────────────────────────────────────────────────────
 postgres_data/
 
-# Editor
+# ── Editors ───────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.swp
+*.swo

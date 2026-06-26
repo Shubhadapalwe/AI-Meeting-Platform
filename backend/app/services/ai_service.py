@@ -24,20 +24,44 @@ STORAGE_DIR = BACKEND_ROOT / "storage"
 TRANSCRIPTS_DIR = STORAGE_DIR / "transcripts"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "")
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_openai_client():
-    if not OPENAI_API_KEY:
-        return None
+def _get_llm_client():
+    """
+    Returns (client, model_name).
+    Priority: OpenAI → Gemini (free) → None (extractive fallback).
+    Gemini uses OpenAI-compatible endpoint — no extra package needed.
+    """
     try:
         from openai import OpenAI
-        return OpenAI(api_key=OPENAI_API_KEY)
+        if OPENAI_API_KEY:
+            return OpenAI(api_key=OPENAI_API_KEY), "gpt-4o-mini"
+        if SARVAM_API_KEY:
+            # Sarvam-105B via OpenAI-compatible endpoint — best for Indian languages
+            return OpenAI(
+                api_key=SARVAM_API_KEY,
+                base_url="https://api.sarvam.ai/v1",
+            ), "sarvam-m"
+        if GEMINI_API_KEY:
+            return OpenAI(
+                api_key=GEMINI_API_KEY,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            ), "gemini-1.5-flash"
     except ImportError:
-        return None
+        pass
+    return None, None
+
+
+# Legacy alias used in a few places
+def _get_openai_client():
+    client, _ = _get_llm_client()
+    return client
 
 
 def _load_transcript_text(meeting_id: str) -> Optional[str]:
@@ -128,42 +152,72 @@ def _extractive_summary(text: str) -> SummaryResponse:
 # ---------------------------------------------------------------------------
 
 def _openai_summary(text: str) -> SummaryResponse:
-    client = _get_openai_client()
+    client, model = _get_llm_client()
     if not client:
         return _extractive_summary(text)
 
-    prompt = f"""You are an AI meeting assistant. Analyze the following meeting transcript and return a JSON object with these keys:
-- short_summary: 2-3 sentence summary of the meeting
-- action_items: list of action items (strings), what needs to be done
-- decisions: list of key decisions made (strings)
+    prompt = f"""You are an expert AI meeting assistant, like Fathom. Analyze the transcript and return a JSON object with EXACTLY these keys:
+
+{{
+  "short_summary": "2-3 sentence overview of what this meeting was about",
+  "meeting_purpose": "One sentence: what was the goal of this meeting?",
+  "key_takeaways": [
+    {{"title": "Short bold heading", "detail": "1-2 sentence explanation"}}
+  ],
+  "topics": [
+    {{
+      "title": "Topic name",
+      "points": ["bullet point 1", "bullet point 2"]
+    }}
+  ],
+  "action_items": ["Owner: what they will do"],
+  "decisions": ["A decision that was made"],
+  "next_steps": [
+    {{"person": "Name or Team", "task": "what they need to do"}}
+  ]
+}}
+
+Rules:
+- key_takeaways: 3-5 most important insights, each with a short bold title
+- topics: main subjects discussed (2-6 topics), each with 2-4 bullet points
+- action_items: concrete tasks with owner name if mentioned
+- next_steps: grouped by person/team
+- Use actual names from the transcript where possible
 
 Transcript:
 {text[:8000]}
 
-Respond with valid JSON only."""
+Respond with valid JSON only, no markdown fences."""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
         )
         raw = response.choices[0].message.content.strip()
-        # Strip markdown code block if present
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
         data = json.loads(raw)
         return SummaryResponse(
             short_summary=data.get("short_summary", ""),
+            meeting_purpose=data.get("meeting_purpose", ""),
+            key_takeaways=data.get("key_takeaways", []),
+            topics=data.get("topics", []),
             action_items=data.get("action_items", []),
             decisions=data.get("decisions", []),
+            next_steps=data.get("next_steps", []),
+            key_topics=[t.get("title", "") for t in data.get("topics", [])],
             word_count=len(text.split()),
-            generated_by="gpt-4o-mini",
+            generated_by=model,
         )
     except Exception as e:
-        # Fall back to extractive on any error
+        err = str(e)
         result = _extractive_summary(text)
-        result.short_summary = f"[OpenAI error: {e}] " + result.short_summary
+        if "429" in err or "quota" in err.lower() or "rate" in err.lower():
+            result.short_summary = "⚠️ AI quota exceeded — showing keyword summary. Wait 1 min or get a new key at aistudio.google.com."
+        else:
+            result.short_summary = f"[AI error: {e}] " + result.short_summary
         return result
 
 
@@ -172,7 +226,7 @@ Respond with valid JSON only."""
 # ---------------------------------------------------------------------------
 
 def _ask_openai(question: str, transcript: str) -> str:
-    client = _get_openai_client()
+    client, model = _get_llm_client()
     if not client:
         return _keyword_search(question, transcript)
 
@@ -187,12 +241,15 @@ Question: {question}
 Answer:"""
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
+        err = str(e)
+        if "429" in err or "quota" in err.lower() or "rate" in err.lower():
+            return "⚠️ AI quota exceeded. Please wait a minute and try again, or get a new API key from aistudio.google.com."
         return _keyword_search(question, transcript)
 
 
@@ -243,7 +300,8 @@ class AIService:
         text = _load_transcript_with_speakers(meeting_id)
         if not text:
             raise FileNotFoundError(f"No transcript found for meeting {meeting_id}")
-        result = _openai_summary(text) if OPENAI_API_KEY else _extractive_summary(text)
+        # Always try LLM summary (handles OpenAI → Gemini → extractive fallback internally)
+        result = _openai_summary(text)
 
         # Save to disk so PDF generation can find it without calling Ollama
         summaries_dir = STORAGE_DIR / "summaries"
@@ -253,9 +311,13 @@ class AIService:
             json.dump({
                 "meeting_id": meeting_id,
                 "short_summary": result.short_summary,
+                "meeting_purpose": result.meeting_purpose,
+                "key_takeaways": result.key_takeaways,
+                "topics": result.topics,
                 "key_topics": result.key_topics,
                 "action_items": result.action_items,
                 "decisions": result.decisions,
+                "next_steps": result.next_steps,
                 "generated_by": result.generated_by,
                 "word_count": result.word_count,
                 "created_at": datetime.now().isoformat(timespec="seconds"),
@@ -268,11 +330,12 @@ class AIService:
         if not text:
             raise FileNotFoundError(f"No transcript found for meeting {meeting_id}")
         answer = _ask_openai(question, text)
+        _, model = _get_llm_client()
         return AskAIResponse(
             meeting_id=meeting_id,
             question=question,
             answer=answer,
-            generated_by="gpt-4o-mini" if OPENAI_API_KEY else "keyword_search",
+            generated_by=model or "keyword_search",
         )
 
     def get_analytics(self, meeting_id: str) -> dict:

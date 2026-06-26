@@ -4,6 +4,7 @@ import RecordingControls from "./components/RecordingControls";
 import TranscriptPanel from "./components/TranscriptPanel";
 import AISummaryPanel from "./components/AISummaryPanel";
 import AskAIPanel from "./components/AskAIPanel";
+import EmailDigestPanel from "./components/EmailDigestPanel";
 import MeetingHistory from "./pages/MeetingHistory";
 import {
   LiveKitRoom,
@@ -305,6 +306,23 @@ function MeetingRoom({ meeting, connection, participantName, onLeave }) {
     }).catch(() => null);
   }
 
+  // Audio processing options: applied to every mic track LiveKit creates,
+  // including when the user clicks Unmute (setMicrophoneEnabled(true)).
+  // echoCancellation removes remote audio played through speakers from the
+  // outgoing mic signal — this is what eliminates echo for other participants.
+  const liveKitOptions = {
+    audioCaptureDefaults: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+    audioOutput: {
+      // Ensure audio output goes through the default device so the browser's
+      // built-in AEC (Acoustic Echo Cancellation) can reference it properly.
+      deviceId: "default",
+    },
+  };
+
   return (
     <LiveKitRoom
       token={connection.token}
@@ -312,6 +330,7 @@ function MeetingRoom({ meeting, connection, participantName, onLeave }) {
       connect={true}
       video={false}
       audio={false}
+      options={liveKitOptions}
       onDisconnected={handleDisconnected}
       connectOptions={{ autoSubscribe: true }}
       style={{ width: "100%", height: "100%" }}
@@ -327,6 +346,12 @@ function MeetingRoom({ meeting, connection, participantName, onLeave }) {
 }
 
 function RealMeetingShell({ meeting, participantName, onLeave }) {
+  // Get remote participant names so RecordingControls can label their audio
+  const allParticipants = useParticipants();
+  const otherParticipants = allParticipants
+    .filter((p) => !p.isLocal)
+    .map((p) => p.name || p.identity);
+
   return (
     <div
       style={{
@@ -399,6 +424,7 @@ function RealMeetingShell({ meeting, participantName, onLeave }) {
           <ControlsBar
             meetingId={meeting.meeting_id}
             participantName={participantName}
+            otherParticipants={otherParticipants}
           />
         </div>
 
@@ -621,7 +647,7 @@ function ParticipantTile({ trackRef, meetingId }) {
   );
 }
 
-function ControlsBar({ meetingId, participantName }) {
+function ControlsBar({ meetingId, participantName, otherParticipants = [] }) {
   const {
     localParticipant,
     isMicrophoneEnabled,
@@ -634,7 +660,17 @@ function ControlsBar({ meetingId, participantName }) {
     try {
       setMediaError("");
       const next = !isMicrophoneEnabled;
-      await localParticipant.setMicrophoneEnabled(next);
+      if (next) {
+        // Pass AEC constraints explicitly — setMicrophoneEnabled ignores
+        // the Room-level audioCaptureDefaults without this.
+        await localParticipant.setMicrophoneEnabled(true, {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        });
+      } else {
+        await localParticipant.setMicrophoneEnabled(false);
+      }
       await recordParticipantEvent({
         meeting_id: meetingId,
         participant_name: participantName,
@@ -732,6 +768,7 @@ function ControlsBar({ meetingId, participantName }) {
       <RecordingControls
         meetingId={meetingId}
         participantName={participantName}
+        otherParticipants={otherParticipants}
       />
     </div>
     </div>
@@ -741,58 +778,33 @@ function ControlsBar({ meetingId, participantName }) {
 function SidePanel({ meetingId }) {
   const participants = useParticipants();
   const [activeTab, setActiveTab] = useState("transcript");
+  const [pdfFilename, setPdfFilename] = useState(null);
 
-  const sectionTitle = (icon, text) => (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        margin: "20px 0 10px",
-        padding: "0 20px",
-      }}
-    >
-      <span style={{ color: "#6d8cff" }}>{icon}</span>
-      <h3 style={{ margin: 0, fontSize: 15, color: "#e2e8f0", fontWeight: 700 }}>
-        {text}
-      </h3>
-    </div>
-  );
+  const TABS = [
+    { id: "transcript", label: "📝 Transcript" },
+    { id: "summary",    label: "✨ Summary" },
+    { id: "ask",        label: "💬 Ask AI" },
+    { id: "email",      label: "📧 Email" },
+  ];
 
   return (
     <div style={{ padding: "8px 0" }}>
-      {sectionTitle(<Users size={16} />, `Participants (${participants.length})`)}
+      {/* Participants */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "16px 0 10px", padding: "0 20px" }}>
+        <span style={{ color: "#6d8cff" }}><Users size={16} /></span>
+        <h3 style={{ margin: 0, fontSize: 15, color: "#e2e8f0", fontWeight: 700 }}>
+          Participants ({participants.length})
+        </h3>
+      </div>
 
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          padding: "0 16px",
-        }}
-      >
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 16px" }}>
         {participants.map((p) => (
-          <div
-            key={p.identity}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              background: "rgba(255,255,255,0.05)",
-              borderRadius: 12,
-              padding: "10px 14px",
-            }}
-          >
-            <strong style={{ color: "#e2e8f0", fontSize: 14 }}>
-              {p.name || p.identity}
-            </strong>
-            <small
-              style={{
-                color: p.isSpeaking ? "#4ade80" : "#64748b",
-                fontWeight: 700,
-                fontSize: 12,
-              }}
-            >
+          <div key={p.identity} style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "10px 14px",
+          }}>
+            <strong style={{ color: "#e2e8f0", fontSize: 14 }}>{p.name || p.identity}</strong>
+            <small style={{ color: p.isSpeaking ? "#4ade80" : "#64748b", fontWeight: 700, fontSize: 12 }}>
               {p.isSpeaking ? "Speaking" : "Connected"}
             </small>
           </div>
@@ -801,30 +813,42 @@ function SidePanel({ meetingId }) {
 
       {/* AI Tabs */}
       <div style={{
-        display: "flex", gap: 4, padding: "8px 16px 0", marginTop: 8,
-        borderTop: "1px solid rgba(255,255,255,0.07)",
+        display: "flex", gap: 3, padding: "8px 16px 0", marginTop: 8,
+        borderTop: "1px solid rgba(255,255,255,0.07)", flexWrap: "wrap",
       }}>
-        {["transcript", "summary", "ask"].map((tab) => (
+        {TABS.map(({ id, label }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={id}
+            onClick={() => setActiveTab(id)}
             style={{
-              flex: 1, padding: "8px 4px", borderRadius: 10, border: "none",
-              background: activeTab === tab ? "#2563eb" : "rgba(255,255,255,0.06)",
-              color: activeTab === tab ? "white" : "#94a3b8",
+              flex: "1 1 auto", padding: "8px 4px", borderRadius: 10, border: "none",
+              background: activeTab === id ? "#2563eb" : "rgba(255,255,255,0.06)",
+              color: activeTab === id ? "white" : "#94a3b8",
               fontWeight: 700, fontSize: 11, cursor: "pointer",
-              textTransform: "capitalize",
             }}
           >
-            {tab === "transcript" ? "📝 Transcript" : tab === "summary" ? "✨ Summary" : "💬 Ask AI"}
+            {label}
           </button>
         ))}
       </div>
 
       <div style={{ padding: "8px 0 16px" }}>
         {activeTab === "transcript" && <TranscriptPanel meetingId={meetingId} />}
-        {activeTab === "summary" && <AISummaryPanel meetingId={meetingId} />}
+        {activeTab === "summary" && (
+          <AISummaryPanel
+            meetingId={meetingId}
+            onPdfGenerated={(filename) => {
+              setPdfFilename(filename);
+              setActiveTab("email");   // auto-switch to email tab
+            }}
+          />
+        )}
         {activeTab === "ask" && <AskAIPanel meetingId={meetingId} />}
+        {activeTab === "email" && (
+          <div style={{ padding: "8px 16px" }}>
+            <EmailDigestPanel meetingId={meetingId} pdfFilename={pdfFilename} />
+          </div>
+        )}
       </div>
     </div>
   );

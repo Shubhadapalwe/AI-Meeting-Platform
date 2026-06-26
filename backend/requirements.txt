@@ -9,6 +9,10 @@ PyJWT==2.10.1
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.20
 faster-whisper==1.1.1
+whisperx
 requests==2.32.3
 openai>=1.0.0
 reportlab
+email-validator>=2.0.0
+assemblyai>=0.24.0
+sarvamai>=0.1.0

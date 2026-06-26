@@ -1,135 +1,110 @@
 """
-Phase 5 — Speaker Diarization
+Phase 2 — Speaker Identification (simplified)
 
-Strategy: We already record active_speaker events from LiveKit with wall-clock
-timestamps. The recording starts at a known time (first event after joining).
-
-Algorithm:
-1. Load the transcript segments (already have start/end offsets in seconds).
-2. Load active_speaker events for the meeting (wall-clock timestamps).
-3. Compute a "recording start time" = earliest join event timestamp.
-4. For each transcript segment, find which participant was speaking at that
-   audio offset (segment.start seconds after recording start).
-5. Assign that participant as the speaker label.
-
-If no events exist, all segments get label "Speaker 1".
+Since each audio file is recorded by exactly one participant, speaker labels
+are assigned at transcription time from the recording metadata. This service
+just merges all per-participant transcripts, deduplicates, and sorts by time.
+LiveKit active_speaker events are no longer needed for speaker assignment.
 """
 
 import json
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from datetime import datetime
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 STORAGE_DIR = BACKEND_ROOT / "storage"
 TRANSCRIPTS_DIR = STORAGE_DIR / "transcripts"
-EVENTS_DIR = STORAGE_DIR / "events"
-
-
-def _load_events(meeting_id: str) -> List[dict]:
-    safe = meeting_id.replace("/", "_").replace(" ", "_")
-    events_file = EVENTS_DIR / f"{safe}.json"
-    if not events_file.exists():
-        return []
-    with open(events_file, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _load_transcript(meeting_id: str) -> Optional[dict]:
-    """Return the most recent transcript for this meeting."""
-    candidates = list(TRANSCRIPTS_DIR.glob(f"{meeting_id}_*.json"))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    with open(candidates[0], "r", encoding="utf-8") as f:
-        return json.load(f), candidates[0]
 
 
 def diarize(meeting_id: str) -> dict:
-    result = _load_transcript(meeting_id)
-    if result is None:
-        raise FileNotFoundError(f"No transcript found for meeting {meeting_id}")
+    """Merge all transcripts for this meeting into one sorted transcript."""
 
-    transcript_data, transcript_path = result
-    segments = transcript_data.get("segments", [])
+    # Exclude previously-written merged file so it doesn't pollute the next run
+    # (merged.json matches the glob but contains stale combined data from last run)
+    transcript_files = sorted(
+        [
+            p for p in TRANSCRIPTS_DIR.glob(f"{meeting_id}_*.json")
+            if not p.name.endswith("_merged.json")
+        ],
+        key=lambda p: p.stat().st_mtime,
+    )
+    if not transcript_files:
+        raise FileNotFoundError(
+            f"No transcripts found for meeting {meeting_id}. "
+            "Generate transcript first."
+        )
 
-    events = _load_events(meeting_id)
-    speaker_events = [
-        e for e in events if e.get("event_type") == "active_speaker"
-    ]
-    join_events = [
-        e for e in events if e.get("event_type") == "joined"
-    ]
+    merged_segments = []
+    participants = set()
+    language = "unknown"
+    max_duration = 0.0
 
-    if not speaker_events:
-        # No diarization data — label everything as Speaker 1
-        for seg in segments:
-            seg["speaker"] = "Speaker 1"
-        transcript_data["segments"] = segments
-        transcript_data["diarization_status"] = "no_events_available"
-        _save_transcript(transcript_data, transcript_path)
-        return transcript_data
+    for tf in transcript_files:
+        try:
+            with open(tf, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
 
-    # Determine recording start time.
-    # Priority: recording_started event > joined event > earliest speaker event.
-    # "recording_started" is emitted by the frontend exactly when MediaRecorder.start()
-    # is called, so its wall-clock time aligns with offset 0:00 in the audio file.
-    recording_start_events = [
-        e for e in events if e.get("event_type") == "recording_started"
-    ]
-    if recording_start_events:
-        ref_events = recording_start_events
-    elif join_events:
-        ref_events = join_events
-    else:
-        ref_events = speaker_events
+        language = data.get("language", language)
+        max_duration = max(max_duration, float(data.get("duration", 0) or 0))
 
-    recording_start = datetime.fromisoformat(
-        min(e["created_at"] for e in ref_events).replace("Z", "+00:00")
+        for seg in data.get("segments", []):
+            seg = dict(seg)
+            speaker = seg.get("speaker") or data.get("participant_name") or "Speaker"
+            seg["speaker"] = speaker
+            participants.add(speaker)
+            merged_segments.append(seg)
+
+    # Deduplicate by (start, end, text)
+    seen = set()
+    deduped = []
+    for seg in merged_segments:
+        key = (
+            round(float(seg.get("start", 0) or 0), 2),
+            round(float(seg.get("end", 0) or 0), 2),
+            (seg.get("text") or "").strip(),
+        )
+        if key not in seen:
+            seen.add(key)
+            deduped.append(seg)
+
+    deduped.sort(key=lambda s: float(s.get("start", 0) or 0))
+
+    full_text = "\n".join(
+        f"{s['speaker']}: {s['text']}"
+        for s in deduped if s.get("text")
     )
 
-    # Build a sorted timeline of speaker activations
-    timeline = []
-    for e in sorted(speaker_events, key=lambda x: x["created_at"]):
-        ts = datetime.fromisoformat(e["created_at"].replace("Z", "+00:00"))
-        offset_seconds = (ts - recording_start).total_seconds()
-        if offset_seconds < 0:
-            offset_seconds = 0
-        timeline.append({
-            "participant": e["participant_name"],
-            "offset": offset_seconds,
-        })
+    result = {
+        "meeting_id": meeting_id,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "language": language,
+        "duration": round(max_duration, 2),
+        "participants": sorted(participants),
+        "segment_count": len(deduped),
+        "segments": deduped,
+        "full_text": full_text,
+        "diarization_status": "completed",
+    }
 
-    # Map each segment to a speaker
-    for seg in segments:
-        seg_mid = (seg["start"] + seg["end"]) / 2
-        speaker = _find_speaker_at(timeline, seg_mid)
-        seg["speaker"] = speaker
+    # Save merged transcript back so PDF/summary can find it
+    output_path = TRANSCRIPTS_DIR / f"{meeting_id}_merged.json"
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
 
-    # Build unique speaker list
-    speakers = list(dict.fromkeys(
-        s["speaker"] for s in segments if s.get("speaker")
-    ))
+    # Also update individual transcript files with speaker labels
+    for tf in transcript_files:
+        try:
+            with open(tf, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            participant = data.get("participant_name", "Speaker")
+            for seg in data.get("segments", []):
+                if not seg.get("speaker"):
+                    seg["speaker"] = participant
+            with open(tf, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception:
+            continue
 
-    transcript_data["segments"] = segments
-    transcript_data["speakers"] = speakers
-    transcript_data["diarization_status"] = "completed"
-
-    _save_transcript(transcript_data, transcript_path)
-    return transcript_data
-
-
-def _find_speaker_at(timeline: List[dict], offset: float) -> str:
-    """Find the most recent speaker active at or before `offset` seconds."""
-    best = None
-    for entry in timeline:
-        if entry["offset"] <= offset:
-            best = entry["participant"]
-        else:
-            break
-    return best or (timeline[0]["participant"] if timeline else "Unknown")
-
-
-def _save_transcript(data: dict, path: Path):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    return result

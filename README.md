@@ -1,175 +1,265 @@
-# AI Meeting Intelligence Platform
+# 🎙️ AI Meeting Intelligence Platform
 
-A Zoom-like meeting system with a Fathom-style AI assistant.
+A self-hosted, Fathom-style AI meeting assistant with real-time WebRTC video, automatic transcription in Indian languages, speaker diarization, AI-generated summaries, and email delivery — all running on your own machine.
 
-## Current Version
+---
 
-Phase 2: Realtime Meeting Infrastructure
+## ✨ Features
 
-This version converts the Phase 1 static meeting UI into a real WebRTC meeting foundation using LiveKit.
+- **Video Meetings** — Real-time WebRTC rooms via LiveKit (camera, mic, screen share, mute)
+- **Recording** — Host records directly from the browser (no plugins)
+- **Transcription** — Sarvam AI (22 Indian languages + Hinglish) → AssemblyAI → WhisperX (fully offline fallback)
+- **Speaker Diarization** — Automatically identifies who said what, mapped to participant names
+- **AI Summary** — Short summary, key takeaways, action items, decisions, next steps
+- **Ask AI** — Chat with your meeting transcript ("What did Shubhada say about the deadline?")
+- **PDF Export** — Professional meeting report, auto-generated
+- **Email Delivery** — Summary + PDF sent to all participants after the meeting
+- **Android Support** — Join from any device on the same WiFi network
+- **Offline-capable** — Runs entirely on your machine with local Whisper models
 
-## Phase 2 Included
+---
 
-- FastAPI backend foundation
-- React + Vite frontend
-- LiveKit local media server through Docker Compose
-- Backend LiveKit token generation endpoint
-- Realtime room join flow
-- Camera and microphone publishing
-- Remote participant video tiles
-- Mute/unmute control
-- Camera on/off control
-- Screen sharing control
-- Active speaker visual highlight
-- Participant event logging API
-- Mock AI notes panel kept for future AI pipeline
-- PostgreSQL and Redis services prepared for next phases
+## 🛠️ Tech Stack
 
-## Why Phase 2 is important
+| Layer | Technology |
+|---|---|
+| Frontend | React 18 + Vite, LiveKit JS SDK |
+| Backend | FastAPI (Python 3.11) |
+| Database | PostgreSQL + Redis |
+| Video/Audio | LiveKit (self-hosted) |
+| Transcription | Sarvam AI (Saaras v3) → AssemblyAI → WhisperX → faster-whisper |
+| AI Summary | Sarvam-M → Gemini 1.5 Flash → extractive fallback |
+| PDF | ReportLab |
+| Infrastructure | Docker Compose |
 
-The AI modules depend on meeting data. Before transcription, diarization, summaries, and Ask-AI, the product needs reliable realtime meeting infrastructure.
+---
 
-This phase captures the metadata required later for speaker mapping:
+## 🚀 Quick Start
 
-- participant joined
-- participant left
-- mic changed
-- camera changed
-- screen share changed
-- active speaker detected
+### Prerequisites
 
-This data will help improve diarization beyond pure audio-only detection.
+- Docker Desktop installed and running
+- Mac or Linux (Windows with WSL2 should work)
 
-## Project Structure
+### 1. Clone the repo
 
-```text
+```bash
+git clone https://github.com/YOUR_USERNAME/meeting-ai-platform.git
+cd meeting-ai-platform
+```
+
+### 2. Set up environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your credentials (see [Environment Variables](#-environment-variables) below).
+
+### 3. Start everything
+
+```bash
+bash start.sh
+```
+
+This will:
+- Detect your Mac's WiFi IP automatically
+- Generate self-signed SSL certificates (required for microphone access in browser)
+- Start all Docker services (backend, frontend, LiveKit, PostgreSQL, Redis)
+
+### 4. Open the app
+
+```
+https://localhost:5173
+```
+
+> Accept the browser's SSL warning (self-signed cert for local use). This is normal.
+
+### 5. Join from Android
+
+On the same WiFi network, open:
+
+```
+https://192.168.x.x:5173
+```
+
+Replace with your Mac's actual IP (shown when `start.sh` runs).
+
+---
+
+## 🔑 Environment Variables
+
+Copy `.env.example` to `.env` and fill in:
+
+```env
+# ── Network ──────────────────────────────────────────────────────────────────
+# Your Mac's WiFi IP — find it with: ipconfig getifaddr en0
+HOST_IP=192.168.1.xxx
+
+# ── Sarvam AI (BEST for Indian languages) ────────────────────────────────────
+# Supports Hindi, Marathi, Tamil, Telugu, Bengali + Hinglish code-mixing
+# Also used for AI summary (Sarvam-M model)
+# Get FREE key at: https://dashboard.sarvam.ai → API Keys
+SARVAM_API_KEY=sk_...
+
+# ── AssemblyAI (fallback diarization) ────────────────────────────────────────
+# FREE 100 hours/month
+# Get key at: https://www.assemblyai.com → Account → API Keys
+ASSEMBLYAI_API_KEY=...
+
+# ── Gemini (fallback AI summary) ─────────────────────────────────────────────
+# FREE at: https://aistudio.google.com → Get API Key
+GEMINI_API_KEY=...
+
+# ── Email (optional) ─────────────────────────────────────────────────────────
+# For Gmail: enable 2FA, then create App Password at:
+# https://myaccount.google.com/apppasswords
+# Without this, emails are saved locally but not sent.
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASSWORD=xxxx xxxx xxxx xxxx
+EMAIL_FROM=you@gmail.com
+```
+
+If no API keys are set, the system falls back to local WhisperX (offline, no cost).
+
+---
+
+## 🏗️ Project Structure
+
+```
 meeting-ai-platform/
 ├── backend/
 │   ├── app/
-│   │   ├── api/
-│   │   ├── core/
-│   │   ├── schemas/
-│   │   └── services/
+│   │   ├── api/               # FastAPI route handlers
+│   │   │   ├── meetings.py
+│   │   │   ├── transcripts.py
+│   │   │   ├── ai.py
+│   │   │   ├── email.py
+│   │   │   └── pdf.py
+│   │   ├── services/          # Business logic
+│   │   │   ├── transcription_service.py  # Sarvam → AssemblyAI → Whisper
+│   │   │   ├── ai_service.py             # Summary + Ask AI
+│   │   │   ├── pdf_service.py
+│   │   │   └── email_service.py
+│   │   ├── schemas/           # Pydantic models
+│   │   └── main.py
+│   ├── storage/               # Runtime data (gitignored)
+│   │   ├── recordings/
+│   │   ├── transcripts/
+│   │   ├── summaries/
+│   │   └── pdfs/
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── services/
-│   │   ├── main.jsx
-│   │   └── styles.css
+│   │   ├── components/
+│   │   │   ├── RecordingControls.jsx    # Audio capture + diarization trigger
+│   │   │   ├── MeetingRoom.jsx          # Main video room
+│   │   │   ├── TranscriptPanel.jsx
+│   │   │   ├── SummaryPanel.jsx
+│   │   │   └── AskAIPanel.jsx
+│   │   ├── pages/
+│   │   │   ├── LandingPage.jsx
+│   │   │   └── MeetingPage.jsx
+│   │   └── main.jsx
+│   ├── vite.config.js         # Includes LiveKit WebSocket proxy
 │   ├── package.json
 │   └── Dockerfile
-├── ai/
+├── certs/                     # Auto-generated SSL certs (gitignored)
 ├── docker-compose.yml
-└── README.md
+├── start.sh                   # One-command startup script
+├── .env.example
+└── .gitignore
 ```
 
-## Run Recommended Way: Docker Compose
+---
 
-From project root:
+## 🧠 How Transcription Works
 
-```bash
-docker compose up --build
+```
+Single recording file (host only)
+    └─► AI Diarization enabled
+            ├─ Sarvam Saaras v3 Batch API  (best for Indian languages)
+            ├─ AssemblyAI                   (fallback)
+            └─ WhisperX local              (offline fallback)
+
+Multiple recording files (each participant records)
+    └─► Each file labelled with that participant's name (100% accurate)
+            ├─ Sarvam Saaras v3 (no diarization needed)
+            ├─ AssemblyAI single-speaker
+            └─ WhisperX / faster-whisper
 ```
 
-Open frontend:
+Speaker names are mapped in order of first appearance: the host maps to `SPEAKER_0`, the next detected speaker to `SPEAKER_1`, and so on.
 
-```text
-http://localhost:5173
+---
+
+## 🤖 AI Summary Priority Chain
+
+```
+OpenAI GPT-4o-mini  (if OPENAI_API_KEY set)
+    ↓ fallback
+Sarvam-M            (optimized for Indian context + languages)
+    ↓ fallback
+Gemini 1.5 Flash    (free quota)
+    ↓ fallback
+Extractive summary  (offline, no API key needed)
 ```
 
-Backend health check:
+---
 
-```text
-http://localhost:8000/health
+## 📡 API Endpoints
+
 ```
-
-LiveKit server:
-
-```text
-ws://localhost:7880
-```
-
-## Run Without Docker
-
-Use this only if LiveKit server is already running separately.
-
-### Backend
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn app.main:app --reload --port 8000
-```
-
-### Frontend
-
-Open a new terminal:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open:
-
-```text
-http://localhost:5173
-```
-
-## How to Test Phase 2
-
-1. Run Docker Compose.
-2. Open `http://localhost:5173`.
-3. Create a meeting.
-4. Click Join Meeting.
-5. Allow camera and microphone permissions.
-6. Copy the meeting link.
-7. Open the same link in another browser tab or another browser.
-8. Join as a different name.
-9. Test:
-   - mute/unmute
-   - camera on/off
-   - screen share
-   - active speaker highlight
-   - participant list
-
-## Current API Endpoints
-
-```text
 GET  /health
 POST /api/meetings/create
 GET  /api/meetings/{meeting_id}
 POST /api/livekit/token
 POST /api/participants/events
-GET  /api/participants/events/{meeting_id}
-POST /api/ai/mock-summary
+POST /api/recordings/upload
+POST /api/transcripts/process/{meeting_id}
+GET  /api/transcripts/{meeting_id}
+POST /api/ai/summary/{meeting_id}
+POST /api/ai/ask/{meeting_id}
+GET  /api/ai/analytics/{meeting_id}
+GET  /api/pdf/{meeting_id}
+POST /api/email/send/{meeting_id}
 ```
 
-## Next Phase
+---
 
-Phase 3: Recording and Audio Capture Pipeline
+## 🔧 Manual Docker Commands
 
-Planned work:
+```bash
+# Start all services
+docker compose up -d --build
 
-- start/stop recording button
-- meeting recording status
-- audio extraction using FFmpeg
-- storage folder structure
-- recording metadata table design
-- prepare audio for Whisper transcription
+# View logs
+docker compose logs -f backend
+docker compose logs -f frontend
 
-## Phase 2.1 Multi-Participant Local Test Fix
+# Restart a single service
+docker compose restart backend
 
-This version improves the 3-4 participant test:
+# Stop everything
+docker compose down
 
-- LiveKit advertises `127.0.0.1` as the node IP for local Docker testing.
-- Direct meeting links now ask each participant to enter a unique name.
-- Video grid is stabilized for 1-4 participants.
-- Participant panel shows live count.
+# Full reset (clears database)
+docker compose down -v
+```
 
-Use different browsers for local testing: Chrome normal, Chrome Incognito, Safari, Firefox.
+---
+
+## 🌐 Supported Languages
+
+Powered by Sarvam AI Saaras v3:
+
+Assamese, Bengali, Bodo, Dogri, Gujarati, Hindi, Kannada, Kashmiri, Konkani, Maithili, Malayalam, Manipuri, Marathi, Nepali, Odia, Punjabi, Sanskrit, Santali, Sindhi, Tamil, Telugu, Urdu — plus English and Hinglish code-mixing.
+
+---
+
+## 📝 License
+
+MIT License — free to use, modify, and distribute.

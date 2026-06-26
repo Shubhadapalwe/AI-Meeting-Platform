@@ -136,3 +136,24 @@ export async function generateMeetingPDF(meetingId) {
 export function getPDFDownloadUrl(downloadUrl) {
   return `${API_BASE}${downloadUrl}`;
 }
+
+// Phase 9.2 — Speaker Analytics
+export async function getSpeakerAnalytics(meetingId) {
+  return request(`/api/speakers/${meetingId}`);
+}
+
+export async function getSpeakerTimeline(meetingId) {
+  return request(`/api/speakers/${meetingId}/timeline`);
+}
+
+// Phase 10 — Email Digest
+export async function sendEmailDigest(meetingId, emails, pdfFilename = null) {
+  return request(`/api/email/send/${meetingId}`, {
+    method: "POST",
+    body: JSON.stringify({ emails, pdf_filename: pdfFilename }),
+  });
+}
+
+export async function getEmailLogs(meetingId) {
+  return request(`/api/email/logs/${meetingId}`);
+}

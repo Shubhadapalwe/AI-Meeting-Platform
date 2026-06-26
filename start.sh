@@ -79,8 +79,8 @@ EOF
 
 echo "✅  livekit.yaml written with node_ip=${HOST_IP}"
 
-# ── 5. Set LiveKit public URL to go through Vite proxy (WSS) ─────────────────
-# Browser connects wss://HOST_IP:5173/livekit → Vite proxies → ws://livekit:7880
+# ── 5. LiveKit public URL — proxied through Vite (WSS same origin) ───────────
+# Browser: wss://HOST_IP:5173/livekit  →  Vite proxy  →  ws://livekit:7880
 export LIVEKIT_PUBLIC_URL="wss://${HOST_IP}:5173/livekit"
 
 # ── 6. Print access info ──────────────────────────────────────────────────────
@@ -92,16 +92,36 @@ printf  "║  Mac IP           : %-40s ║\n" "${HOST_IP}"
 printf  "║  Open on Mac      : https://%-33s ║\n" "${HOST_IP}:5173"
 printf  "║  Open on Android  : https://%-33s ║\n" "${HOST_IP}:5173"
 echo "╠══════════════════════════════════════════════════════════════╣"
-echo "║  First time on Android Firefox?                              ║"
-echo "║  Import certs/rootCA.pem into Firefox certificate store      ║"
+echo "║  ANDROID SETUP (one-time):                                   ║"
+printf  "║  1. Open https://%-43s ║\n" "${HOST_IP}:5173 → Accept cert"
+printf  "║  2. Download http://%-40s ║\n" "${HOST_IP}:8000/rootca"
+echo "║     Install: Android Settings → Security → Install cert      ║"
+echo "╠══════════════════════════════════════════════════════════════╣"
+echo "║  AUTO SPEAKER DETECTION (pyannote — one-time setup):         ║"
+echo "║  1. Free token: huggingface.co/join                          ║"
+echo "║  2. Accept licenses:                                         ║"
+echo "║     huggingface.co/pyannote/speaker-diarization-3.1          ║"
+echo "║     huggingface.co/pyannote/segmentation-3.0                 ║"
+echo "║  3. Add HUGGINGFACE_TOKEN=hf_xxx to .env                     ║"
+echo "║  Without token: both participants must record separately.     ║"
+echo "╠══════════════════════════════════════════════════════════════╣"
+echo "║  EMAIL SETUP (one-time):                                     ║"
+echo "║  cp .env.example .env  → fill in Gmail SMTP credentials      ║"
+echo "║  Gmail: enable 2FA → myaccount.google.com/apppasswords       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
-# ── 7. Stop old containers ────────────────────────────────────────────────────
+# ── 7. Ensure .env exists (SMTP is optional — app works without it) ──────────
+if [[ ! -f ".env" ]]; then
+  echo "# SMTP credentials (optional). See .env.example for instructions." > .env
+  echo "Creating blank .env — copy .env.example and fill in SMTP to enable email."
+fi
+
+# ── 8. Stop old containers ────────────────────────────────────────────────────
 echo "Stopping old containers..."
 docker-compose down 2>/dev/null || true
 
-# ── 8. Build & start ──────────────────────────────────────────────────────────
+# ── 9. Build & start ──────────────────────────────────────────────────────────
 echo "Building and starting services..."
 docker-compose build
 docker-compose up
