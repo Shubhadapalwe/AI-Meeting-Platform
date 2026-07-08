@@ -347,6 +347,25 @@ The digest email arrives in the recipient's Gmail inbox with the meeting summary
 </p>
 
 ---
+## 📄 Sample AI Generated Meeting Minutes
+
+The AI Meeting Intelligence Platform automatically generates professional meeting minutes after transcription and summarization.
+
+The generated PDF contains:
+
+-  Meeting metadata
+-  Participants
+-  Executive summary
+-  Key discussion topics
+-  Action items
+-  Decisions taken
+- Speaker-wise transcript with timestamps
+
+📥 **Download Sample PDF**
+
+[📄 AI Meeting Minutes Sample](sample_outputs/meeting_minutes_sample.pdf)
+
+> **Note:** This sample PDF was generated entirely by the platform after processing a recorded meeting. It demonstrates the exact document that users can download or email directly from the application.
 
 ## 🔄 Project Flow
 
