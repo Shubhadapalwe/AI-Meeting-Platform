@@ -78,7 +78,7 @@
 
 ---
 
-## 🧠 Why This Project?
+##  Why This Project?
 
 Current meeting tools like **Zoom**, **Google Meet**, or **Microsoft Teams** require a paid subscription to access AI features like transcripts and summaries. More critically, they send all your audio and data to servers owned by third-party companies. For organisations that handle private information — like hospitals, schools, or government offices — this is a serious privacy risk.
 
@@ -106,9 +106,9 @@ Even when these tools are used, transcripts are often inaccurate for **Indian sp
 
 ---
 
-## 📸 Live Demo Screenshots
+## 📸\ Live Demo Screenshots
 
-### 🐳 Docker Startup
+###  Docker Startup
 
 `./start.sh` detects your LAN IP, generates TLS certificates, writes `livekit.yaml`, and starts all 5 Docker services automatically.
 
@@ -128,7 +128,7 @@ Once all containers are running, the script prints your LAN IP and a checklist f
 
 ---
 
-### 🏠 Home Page
+###  Home Page
 
 The landing page greets users with a clean product hero. No technical jargon — just a single **"Start a Free Meeting"** button and a concise explanation of the three steps.
 
@@ -150,7 +150,7 @@ The features grid highlights all AI capabilities — Speaker Transcript, AI Summ
 
 ---
 
-### ➕ Create Meeting
+###  Create Meeting
 
 Click **"Create Meeting"** and fill in a title and your name. The backend generates an 8-character meeting ID and a shareable join URL instantly.
 
@@ -176,7 +176,7 @@ The link can be sent to any device on the same LAN via WhatsApp or any other cha
 
 ---
 
-### 🚪 Join Meeting
+###  Join Meeting
 
 Any participant opens the link in their browser and clicks **"Join Meeting"** — no account, no download, no plugin.
 
@@ -186,7 +186,7 @@ Any participant opens the link in their browser and clicks **"Join Meeting"** �
 
 ---
 
-### 📹 Meeting Room
+###  Meeting Room
 
 The meeting room shows each participant in their own video tile. The host sees the full control bar: Mute, Camera, Share Screen, and Start Recording. The right panel shows the Participants list and AI Transcript tabs.
 
@@ -204,7 +204,7 @@ The meeting room shows each participant in their own video tile. The host sees t
 
 ---
 
-### 🔊 Active Speaker & Screen Share
+###  Active Speaker & Screen Share
 
 The active speaker is detected automatically and their tile is highlighted with a **green border**. The right panel also shows a live **"Speaking"** badge next to the active participant's name.
 
@@ -220,7 +220,7 @@ Participants can share their screen by clicking **Share Screen** — the browser
 
 ---
 
-### 🔴 Recording
+### Recording
 
 The host clicks **Start Recording**. Each participant records their own audio stream locally via the browser's `MediaRecorder` API. The bottom bar switches to a red **Stop Recording** button. A hint reminds the Teacher to record on their own device.
 
@@ -242,7 +242,7 @@ When recording stops, the WebM audio file is uploaded and FFmpeg converts it to 
 
 ---
 
-### 📝 Transcript
+###  Transcript
 
 Once the 4-tier transcription pipeline completes, the full transcript appears in the **Transcript** tab — each segment labelled with the speaker's name and colour-coded.
 
@@ -255,7 +255,7 @@ Once the 4-tier transcription pipeline completes, the full transcript appears in
 
 ---
 
-### 🤖 AI Summary
+###  AI Summary
 
 Switch to the **Summary** tab. Click **"Generate AI Summary"** to produce a structured summary of the meeting, or **"Generate Meeting Minutes PDF"** to create a downloadable PDF.
 
@@ -271,7 +271,7 @@ The AI summary is displayed inline — with the meeting purpose, key takeaways, 
 
 ---
 
-### 📧 Email Digest
+###  Email Digest
 
 Switch to the **Email** tab. Enter one or more recipient email addresses (comma or space separated). The PDF is automatically attached and ready to send.
 
@@ -290,7 +290,7 @@ Multiple recipients can be added at once.
 
 ---
 
-### 💬 Ask AI
+###  Ask AI
 
 The **Ask AI** tab lets participants type any question about the meeting. Suggested questions appear as chips. The answer is retrieved using RAG — only the actual transcript content is used, never hallucinated.
 
@@ -318,7 +318,7 @@ The generated PDF is an 8-section professional document: title page, meeting inf
 
 ---
 
-### 📬 Gmail — Email Received
+###  Gmail — Email Received
 
 The digest email arrives in the recipient's Gmail inbox with the meeting summary, key takeaways, action items, and a **"Download Meeting Minutes PDF"** button.
 
@@ -347,7 +347,7 @@ The digest email arrives in the recipient's Gmail inbox with the meeting summary
 </p>
 
 ---
-## 📄 Sample AI Generated Meeting Minutes
+##  Sample AI Generated Meeting Minutes
 
 The AI Meeting Intelligence Platform automatically generates professional meeting minutes after transcription and summarization.
 
@@ -361,27 +361,27 @@ The generated PDF contains:
 -  Decisions taken
 - Speaker-wise transcript with timestamps
 
-📥 **Download Sample PDF**
+ **Download Sample PDF**
 
-[📄 AI Meeting Minutes Sample](sample_outputs/meeting_minutes_sample.pdf)
+[ AI Meeting Minutes Sample](sample_outputs/meeting_minutes_sample.pdf)
 
 > **Note:** This sample PDF was generated entirely by the platform after processing a recorded meeting. It demonstrates the exact document that users can download or email directly from the application.
 
-## 🔄 Project Flow
+## Project Flow
 
 ```mermaid
 flowchart LR
-    A[🏠 Create Meeting] --> B[🔗 Share Invite Link]
-    B --> C[👥 Participants Join via Browser]
-    C --> D[🔴 Record Audio]
-    D --> E[📤 Upload WebM → WAV]
-    E --> F[🧠 4-Tier Transcription]
-    F --> G[📝 Speaker Diarization]
-    G --> H[🤖 AI Summary]
-    H --> I[💬 Ask AI - RAG]
-    I --> J[📊 Speaker Analytics]
-    J --> K[📄 Generate PDF]
-    K --> L[📧 Send Email Digest]
+    A[Create Meeting] --> B[ Share Invite Link]
+    B --> C[ Participants Join via Browser]
+    C --> D[ Record Audio]
+    D --> E[ Upload WebM → WAV]
+    E --> F[ 4-Tier Transcription]
+    F --> G[ Speaker Diarization]
+    G --> H[ AI Summary]
+    H --> I[ Ask AI - RAG]
+    I --> J[ Speaker Analytics]
+    J --> K[ Generate PDF]
+    K --> L[Send Email Digest]
 ```
 
 **4-Tier Transcription Fallback:**
@@ -389,7 +389,7 @@ flowchart LR
 ```mermaid
 flowchart TD
     A[Audio File WAV] --> B{Tier 1: Sarvam AI}
-    B -->|Success| Z[✅ Transcript Ready]
+    B -->|Success| Z[ Transcript Ready]
     B -->|Fail / No Key| C{Tier 2: AssemblyAI}
     C -->|Success| Z
     C -->|Fail / No Key| D{Tier 3: WhisperX GPU}
@@ -400,7 +400,7 @@ flowchart TD
 
 ---
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 | Layer | Technology | Purpose |
 |---|---|---|
@@ -426,7 +426,7 @@ flowchart TD
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -459,7 +459,7 @@ Five Docker services: `postgres`, `redis`, `livekit`, `backend`, `frontend` — 
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 meeting-ai-platform/
@@ -540,7 +540,7 @@ meeting-ai-platform/
 
 ---
 
-## 🔬 How It Works — Full Flow
+##  How It Works — Full Flow
 
 ### Step 1: Creating a Meeting
 
@@ -951,7 +951,7 @@ The file naming convention is `{meeting_id}_{something_unique}.{ext}` everywhere
 
 ---
 
-## 💡 Technology Choices — Why Not X?
+##  Technology Choices — Why Not X?
 
 ### Why FastAPI and not Flask or Django?
 
@@ -995,7 +995,7 @@ During development, being able to open `storage/summaries/` and **read the JSON 
 
 ---
 
-## 🔐 Security
+##  Security
 
 ### HTTPS / mkcert
 
@@ -1015,7 +1015,7 @@ There's no login system right now. Anyone on the LAN can access all meetings. Th
 
 ---
 
-## 🛡️ Error Handling
+##  Error Handling
 
 | Scenario | Behaviour |
 |---|---|
@@ -1125,7 +1125,7 @@ You'll need to start LiveKit, Postgres, and Redis separately.
 
 ---
 
-## 🚀 Future Scope
+## Future Scope
 
 | Feature | Description |
 |---|---|
@@ -1140,12 +1140,4 @@ You'll need to start LiveKit, Postgres, and Redis separately.
 
 ---
 
-<div align="center">
 
-<br/>
-
-**Built with ❤️ for privacy-first, open-source AI tools**
-
-*Stop taking notes. Start having conversations.*
-
-</div>
